@@ -716,6 +716,44 @@ paths:
       });
     });
 
+    it("handles property values that are arrays of objects", async () => {
+      project.files = {
+        "api.yaml": `
+components:
+  schemas:
+    UserRequest:
+      properties:
+        userType:
+          type: string
+          enum: [foo, bar, baz]
+          x-glean-deprecated:
+            - id: "abc"
+              value: foo
+            - id: "123"
+              value: bar
+`,
+      };
+      await project.write();
+
+      const results = await find("x-glean-deprecated", [
+        `${project.baseDir}/api.yaml`,
+      ]);
+
+      expect(results).toEqual({
+        "components.schemas.UserRequest.properties.userType.x-glean-deprecated":
+          [
+            {
+              id: "abc",
+              value: "foo",
+            },
+            {
+              id: "123",
+              value: "bar",
+            },
+          ],
+      });
+    });
+
     it("works with realistic OpenAPI structure", async () => {
       project.files = {
         "openapi.yaml": `
