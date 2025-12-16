@@ -4,12 +4,6 @@
   "description": "A tool for finding fields in OpenAPI specifications",
   "type": "module",
   "main": "dist/index.js",
-  "exports": {
-    ".": {
-      "main": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
