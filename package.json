@@ -2,7 +2,8 @@
   "name": "openapi-field-finder",
   "version": "1.0.0",
   "description": "A tool for finding fields in OpenAPI specifications",
-  "main": "index.js",
+  "type": "module",
+  "main": "index.ts",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"

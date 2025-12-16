@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Project } from "fixturify-project";
-import { find } from "./find";
+import { find } from "./index";
 
 describe("find", () => {
   let project: Project;
@@ -776,8 +776,7 @@ components:
       // before traversing UserList.items (since User is traversed first alphabetically)
       expect(entityResults).toEqual({
         "components.schemas.User.x-entity": true,
-        "paths./users.get.responses.200.content.application/json.schema.items.x-entity":
-          true,
+        "paths./users.get.responses.200.content.application/json.schema.items.x-entity": true,
       });
     });
 
