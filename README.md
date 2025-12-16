@@ -181,3 +181,31 @@ Result keys use dot-notation to represent the location of each found property:
 | `paths./users.get.x-foo` | Property at `paths["/users"]["get"]["x-foo"]` |
 | `components.schemas.User.x-bar` | Property at `components["schemas"]["User"]["x-bar"]` |
 | `paths./users.get.parameters.0.x-baz` | First parameter's `x-baz` property |
+
+## Development
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+This compiles TypeScript to `./dist/index.js`.
+
+### Test
+
+```bash
+npm run test
+```
+
+To run tests in watch mode:
+
+```bash
+npm run test:watch
+```
