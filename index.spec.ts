@@ -222,6 +222,32 @@ components:
       expect(results).toEqual({});
     });
 
+    it("preserves parameter names for component parameter refs in arrays", async () => {
+      project.files = {
+        "api.yaml": `
+paths:
+  /search:
+    post:
+      parameters:
+        - $ref: "#/components/parameters/foo"
+components:
+  parameters:
+    foo:
+      name: foo
+      x-custom:
+        message: hello
+`,
+      };
+      await project.write();
+
+      const results = await find("x-custom", [`${project.baseDir}/api.yaml`]);
+
+      expect(results).toEqual({
+        "paths./search.post.parameters.0.foo.x-custom": { message: "hello" },
+        "components.parameters.foo.x-custom": { message: "hello" },
+      });
+    });
+
     it("prevents circular reference loops", async () => {
       project.files = {
         "api.yaml": `

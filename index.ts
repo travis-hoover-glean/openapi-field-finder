@@ -217,6 +217,37 @@ const resolveExternalRef = async (
 const buildPath = (segments: string[]): string => segments.join(".");
 
 /**
+ * Determines whether a $ref should contribute a component name segment to the path.
+ * This is used to preserve component identifiers when parameters are referenced.
+ */
+const getParameterRefSegment = (
+  ref: string,
+  currentPath: string[],
+): string | null => {
+  const pointerIndex = ref.indexOf("#/");
+  if (pointerIndex === -1) {
+    return null;
+  }
+
+  const pointer = ref.slice(pointerIndex + 2);
+  const segments = pointer.split("/").map(decodeJsonPointerSegment);
+  const isComponentParameterRef =
+    segments.length === 3 &&
+    segments[0] === "components" &&
+    segments[1] === "parameters";
+  const isParametersArrayEntry =
+    currentPath.length >= 2 &&
+    currentPath[currentPath.length - 2] === "parameters" &&
+    /^\d+$/.test(currentPath[currentPath.length - 1]);
+
+  if (isComponentParameterRef && isParametersArrayEntry) {
+    return segments[2];
+  }
+
+  return null;
+};
+
+/**
  * Recursively walks an object tree, following $ref references, and collects
  * all occurrences of a target property.
  *
@@ -309,12 +340,14 @@ const walkObject = async (
     if (ref.startsWith("#")) {
       const resolved = resolveRef(ref, rootDocument);
       if (resolved !== undefined) {
+        const refSegment = getParameterRefSegment(ref, currentPath);
+        const nextPath = refSegment ? [...currentPath, refSegment] : currentPath;
         await walkObject(
           resolved,
           propertyToFind,
           rootDocument,
           currentFilePath,
-          currentPath,
+          nextPath,
           results,
           visited,
           fileCache,
@@ -327,12 +360,14 @@ const walkObject = async (
         fileCache,
       );
       if (externalResult.value !== undefined) {
+        const refSegment = getParameterRefSegment(ref, currentPath);
+        const nextPath = refSegment ? [...currentPath, refSegment] : currentPath;
         await walkObject(
           externalResult.value,
           propertyToFind,
           externalResult.rootDocument,
           externalResult.filePath,
-          currentPath,
+          nextPath,
           results,
           visited,
           fileCache,

@@ -176,6 +176,28 @@ const resolveExternalRef = async (ref, currentFilePath, fileCache) => {
  */
 const buildPath = (segments) => segments.join(".");
 /**
+ * Determines whether a $ref should contribute a component name segment to the path.
+ * This is used to preserve component identifiers when parameters are referenced.
+ */
+const getParameterRefSegment = (ref, currentPath) => {
+    const pointerIndex = ref.indexOf("#/");
+    if (pointerIndex === -1) {
+        return null;
+    }
+    const pointer = ref.slice(pointerIndex + 2);
+    const segments = pointer.split("/").map(decodeJsonPointerSegment);
+    const isComponentParameterRef = segments.length === 3 &&
+        segments[0] === "components" &&
+        segments[1] === "parameters";
+    const isParametersArrayEntry = currentPath.length >= 2 &&
+        currentPath[currentPath.length - 2] === "parameters" &&
+        /^\d+$/.test(currentPath[currentPath.length - 1]);
+    if (isComponentParameterRef && isParametersArrayEntry) {
+        return segments[2];
+    }
+    return null;
+};
+/**
  * Recursively walks an object tree, following $ref references, and collects
  * all occurrences of a target property.
  *
@@ -245,13 +267,17 @@ const walkObject = async (obj, propertyToFind, rootDocument, currentFilePath, cu
         if (ref.startsWith("#")) {
             const resolved = resolveRef(ref, rootDocument);
             if (resolved !== undefined) {
-                await walkObject(resolved, propertyToFind, rootDocument, currentFilePath, currentPath, results, visited, fileCache);
+                const refSegment = getParameterRefSegment(ref, currentPath);
+                const nextPath = refSegment ? [...currentPath, refSegment] : currentPath;
+                await walkObject(resolved, propertyToFind, rootDocument, currentFilePath, nextPath, results, visited, fileCache);
             }
         }
         else {
             const externalResult = await resolveExternalRef(ref, currentFilePath, fileCache);
             if (externalResult.value !== undefined) {
-                await walkObject(externalResult.value, propertyToFind, externalResult.rootDocument, externalResult.filePath, currentPath, results, visited, fileCache);
+                const refSegment = getParameterRefSegment(ref, currentPath);
+                const nextPath = refSegment ? [...currentPath, refSegment] : currentPath;
+                await walkObject(externalResult.value, propertyToFind, externalResult.rootDocument, externalResult.filePath, nextPath, results, visited, fileCache);
             }
         }
         return;
