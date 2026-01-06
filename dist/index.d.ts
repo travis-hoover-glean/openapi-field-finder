@@ -1,4 +1,5 @@
 export type ISearchResult<T> = Record<string, T>;
+export type FindCallback<T> = (path: string, content: T, parent: Record<string, unknown>) => void | Promise<void>;
 /**
  * Searches for all occurrences of a property in YAML/JSON files, following $ref references.
  *
@@ -24,3 +25,27 @@ export type ISearchResult<T> = Record<string, T>;
  * // }
  */
 export declare const find: <T>(propertyToFind: string, filePathsToSearch: string[]) => Promise<ISearchResult<T>>;
+/**
+ * Searches for all occurrences of a property in YAML/JSON files, following $ref references,
+ * and invokes a callback for each match.
+ *
+ * @param propertyToFind - The property key to search for
+ * @param filePathsToSearch - Array of file paths to search
+ * @param callback - Async callback invoked for each match with (path, content, parent)
+ *
+ * @example
+ * import { findWithCallback } from './extract'
+ *
+ * // For a YAML file containing:
+ * // paths:
+ * //   /foo:
+ * //     x-bar:
+ * //       message: "Baz"
+ *
+ * await findWithCallback('x-bar', ['path/to/foo.yaml'], (path, content, parent) => {
+ *   console.log(path);    // 'paths./foo.x-bar'
+ *   console.log(content); // { message: "Baz" }
+ *   console.log(parent);  // { 'x-bar': { message: "Baz" } }
+ * });
+ */
+export declare const findWithCallback: <T>(propertyToFind: string, filePathsToSearch: string[], callback: FindCallback<T>) => Promise<void>;

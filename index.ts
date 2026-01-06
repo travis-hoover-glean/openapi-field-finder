@@ -5,6 +5,12 @@ import { parse as parseYaml } from "yaml";
 
 export type ISearchResult<T> = Record<string, T>;
 
+export type FindCallback<T> = (
+  path: string,
+  content: T,
+  parent: Record<string, unknown>,
+) => void | Promise<void>;
+
 /**
  * Parses a YAML or JSON file and returns the parsed content.
  *
@@ -400,6 +406,124 @@ const walkObject = async (
 };
 
 /**
+ * Recursively walks an object tree, following $ref references, and invokes a callback
+ * for each occurrence of a target property.
+ *
+ * @param obj - The object to walk
+ * @param propertyToFind - The property key to search for
+ * @param rootDocument - The root document for resolving local $ref references
+ * @param currentFilePath - Current file path for resolving external $ref references
+ * @param currentPath - Current path segments (for building result keys)
+ * @param visited - Set of visited $ref paths to prevent circular references
+ * @param fileCache - Cache of loaded external files
+ * @param callback - Async callback invoked for each match with (path, content, parent)
+ */
+const walkObjectWithCallback = async <T>(
+  obj: unknown,
+  propertyToFind: string,
+  rootDocument: Record<string, unknown>,
+  currentFilePath: string,
+  currentPath: string[],
+  visited: Set<string>,
+  fileCache: Map<string, Record<string, unknown>>,
+  callback: FindCallback<T>,
+): Promise<void> => {
+  if (obj === null || obj === undefined || typeof obj !== "object") {
+    return;
+  }
+
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      await walkObjectWithCallback(
+        obj[i],
+        propertyToFind,
+        rootDocument,
+        currentFilePath,
+        [...currentPath, String(i)],
+        visited,
+        fileCache,
+        callback,
+      );
+    }
+    return;
+  }
+
+  const record = obj as Record<string, unknown>;
+
+  if ("$ref" in record && typeof record.$ref === "string") {
+    const ref = record.$ref;
+    const visitedKey = ref.startsWith("#")
+      ? `${currentFilePath}${ref}`
+      : resolve(dirname(currentFilePath), ref);
+
+    if (visited.has(visitedKey)) {
+      return;
+    }
+    visited.add(visitedKey);
+
+    if (ref.startsWith("#")) {
+      const resolved = resolveRef(ref, rootDocument);
+      if (resolved !== undefined) {
+        const refSegment = getParameterRefSegment(ref, currentPath);
+        const nextPath = refSegment ? [...currentPath, refSegment] : currentPath;
+        await walkObjectWithCallback(
+          resolved,
+          propertyToFind,
+          rootDocument,
+          currentFilePath,
+          nextPath,
+          visited,
+          fileCache,
+          callback,
+        );
+      }
+    } else {
+      const externalResult = await resolveExternalRef(
+        ref,
+        currentFilePath,
+        fileCache,
+      );
+      if (externalResult.value !== undefined) {
+        const refSegment = getParameterRefSegment(ref, currentPath);
+        const nextPath = refSegment ? [...currentPath, refSegment] : currentPath;
+        await walkObjectWithCallback(
+          externalResult.value,
+          propertyToFind,
+          externalResult.rootDocument,
+          externalResult.filePath,
+          nextPath,
+          visited,
+          fileCache,
+          callback,
+        );
+      }
+    }
+    return;
+  }
+
+  if (propertyToFind in record) {
+    const fullPath = buildPath([...currentPath, propertyToFind]);
+    await callback(fullPath, record[propertyToFind] as T, record);
+  }
+
+  for (const key of Object.keys(record)) {
+    if (key === propertyToFind) {
+      continue;
+    }
+    await walkObjectWithCallback(
+      record[key],
+      propertyToFind,
+      rootDocument,
+      currentFilePath,
+      [...currentPath, key],
+      visited,
+      fileCache,
+      callback,
+    );
+  }
+};
+
+/**
  * Searches for all occurrences of a property in YAML/JSON files, following $ref references.
  *
  * @param propertyToFind - The property key to search for
@@ -448,4 +572,52 @@ export const find = async <T>(
   }
 
   return results as ISearchResult<T>;
+};
+
+/**
+ * Searches for all occurrences of a property in YAML/JSON files, following $ref references,
+ * and invokes a callback for each match.
+ *
+ * @param propertyToFind - The property key to search for
+ * @param filePathsToSearch - Array of file paths to search
+ * @param callback - Async callback invoked for each match with (path, content, parent)
+ *
+ * @example
+ * import { findWithCallback } from './extract'
+ *
+ * // For a YAML file containing:
+ * // paths:
+ * //   /foo:
+ * //     x-bar:
+ * //       message: "Baz"
+ *
+ * await findWithCallback('x-bar', ['path/to/foo.yaml'], (path, content, parent) => {
+ *   console.log(path);    // 'paths./foo.x-bar'
+ *   console.log(content); // { message: "Baz" }
+ *   console.log(parent);  // { 'x-bar': { message: "Baz" } }
+ * });
+ */
+export const findWithCallback = async <T>(
+  propertyToFind: string,
+  filePathsToSearch: string[],
+  callback: FindCallback<T>,
+): Promise<void> => {
+  const fileCache = new Map<string, Record<string, unknown>>();
+
+  for (const filePath of filePathsToSearch) {
+    const absolutePath = resolve(filePath);
+    const doc = await parseFile(absolutePath);
+    fileCache.set(absolutePath, doc);
+
+    await walkObjectWithCallback(
+      doc,
+      propertyToFind,
+      doc,
+      absolutePath,
+      [],
+      new Set(),
+      fileCache,
+      callback,
+    );
+  }
 };

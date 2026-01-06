@@ -5,9 +5,15 @@ A library for finding all occurrences of a property in OpenAPI/YAML/JSON files, 
 ## Usage
 
 ```typescript
-import { find } from "openapi-field-finder";
+import { find, findWithCallback } from "openapi-field-finder";
 
+// Returns all matches as a record
 const results = await find("x-custom-extension", ["./openapi.yaml"]);
+
+// Or use a callback for each match
+await findWithCallback("x-custom-extension", ["./openapi.yaml"], (path, content, parent) => {
+  console.log(`Found at ${path}:`, content);
+});
 ```
 
 ## API
@@ -22,6 +28,24 @@ Searches for all occurrences of a property in YAML/JSON files, following `$ref` 
 
 **Returns:**
 A record where keys are dot-notation paths and values are the property values.
+
+**Type Parameter:**
+- `T` - Optional type for the property values (defaults to `unknown`)
+
+### `findWithCallback<T>(propertyToFind: string, filePathsToSearch: string[], callback: FindCallback<T>): Promise<void>`
+
+Searches for all occurrences of a property and invokes a callback for each match.
+
+**Parameters:**
+- `propertyToFind` - The property key to search for
+- `filePathsToSearch` - Array of file paths to search
+- `callback` - Function called for each match: `(path: string, content: T, parent: Record<string, unknown>) => void | Promise<void>`
+  - `path` - Dot-notation path to the property (e.g., `paths./users.get.x-custom`)
+  - `content` - The value of the found property
+  - `parent` - The object containing the found property
+
+**Returns:**
+`Promise<void>` - Resolves when all files have been searched and all callbacks have completed.
 
 **Type Parameter:**
 - `T` - Optional type for the property values (defaults to `unknown`)
@@ -70,6 +94,39 @@ const results = await find<DeprecationInfo>("x-deprecated", ["./api.yaml"]);
 
 // TypeScript knows results values are DeprecationInfo
 console.log(results["paths./users.x-deprecated"].reason);
+```
+
+### Using the Callback API
+
+The callback API is useful when you want to process matches as they're found, or when you need access to the parent object:
+
+```typescript
+import { findWithCallback } from "openapi-field-finder";
+
+// Process each match individually
+await findWithCallback("x-deprecated", ["./api.yaml"], (path, content, parent) => {
+  console.log(`Found deprecated property at: ${path}`);
+  console.log(`Reason: ${content.reason}`);
+  console.log(`Parent object keys: ${Object.keys(parent).join(", ")}`);
+});
+
+// Async callbacks are supported
+await findWithCallback("x-custom", ["./api.yaml"], async (path, content) => {
+  await saveToDatabase(path, content);
+});
+
+// With TypeScript generics
+interface CustomExtension {
+  enabled: boolean;
+  config: Record<string, unknown>;
+}
+
+await findWithCallback<CustomExtension>("x-custom", ["./api.yaml"], (path, content) => {
+  // TypeScript knows content is CustomExtension
+  if (content.enabled) {
+    console.log(`Feature enabled at ${path}`);
+  }
+});
 ```
 
 ### Following Local $ref References
